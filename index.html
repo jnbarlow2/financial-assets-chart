@@ -448,6 +448,8 @@ const state = {
   pan: { x: 0, y: 0 },
   dataLoaded: false,
   lastSaved: null,
+  personWest: 'A',
+  personEast: 'B',
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -547,9 +549,9 @@ function getNodeColor(type) {
 // ═══════════════════════════════════════════════════════════════════
 function getQuadrantCenter(taxCat, person, cw, ch) {
   const mx = cw / 2, my = ch / 2;
-  const pd = 80; // padding from edge
+  const pw = state.personWest || 'A';
   if (person === 'Shared') return { x: mx, y: taxCat === 'Tax-Deferred' ? my * 0.5 : my * 1.5 };
-  const isA = person === 'A', isDeferred = taxCat === 'Tax-Deferred';
+  const isA = person === pw, isDeferred = taxCat === 'Tax-Deferred';
   return {
     x: isA ? mx * 0.5 : mx * 1.5,
     y: isDeferred ? my * 0.5 : my * 1.5
@@ -564,10 +566,11 @@ function autoArrangeNodes() {
     const tc = node.asset.taxCategory || '';
     const p  = node.asset.person || '';
     let q;
+    const pw = state.personWest || 'A', pe = state.personEast || 'B';
     if (p === 'Shared') q = 'CENTER';
-    else if (p === 'A' && tc === 'Tax-Deferred') q = 'NW';
-    else if (p === 'B' && tc === 'Tax-Deferred') q = 'NE';
-    else if (p === 'A') q = 'SW';
+    else if (p === pw && tc === 'Tax-Deferred') q = 'NW';
+    else if (p === pe && tc === 'Tax-Deferred') q = 'NE';
+    else if (p === pw) q = 'SW';
     else q = 'SE';
     quadBuckets[q].push(node);
   });
@@ -628,6 +631,22 @@ function parseWorkbook(wb) {
   const assetSheet = wb.Sheets['Asset Data'];
   if (!assetSheet) throw new Error('Sheet "Asset Data" not found');
   const assetRows = XLSX.utils.sheet_to_json(assetSheet, { header: 1, defval: '' });
+
+  // Read person→quadrant mapping from Legend & Key sheet
+  state.personWest = 'A';
+  state.personEast = 'B';
+  const legendSheet = wb.Sheets['Legend & Key'];
+  if (legendSheet) {
+    const legendRows = XLSX.utils.sheet_to_json(legendSheet, { header: 1, defval: '' });
+    for (let i = 0; i < legendRows.length; i++) {
+      const name = String(legendRows[i][1]).trim();
+      const side = String(legendRows[i][2]).toUpperCase();
+      if (name && name !== 'Symbol / Pattern') {
+        if (side.includes('WEST') && !side.includes('EAST')) state.personWest = name;
+        if (side.includes('EAST') && !side.includes('WEST')) state.personEast = name;
+      }
+    }
+  }
 
   state.assets = [];
   for (let i = 3; i < assetRows.length; i++) {
@@ -772,13 +791,15 @@ function drawQuadrants(cw, ch) {
   ctx.fillStyle = 'rgba(26,39,68,0.25)';
   ctx.textAlign = 'left';
   const pad = 8;
-  ctx.fillText('TAX-DEFERRED / PERSON A', pad, 18);
+  const pw = (state.personWest || 'Person A').toUpperCase();
+  const pe = (state.personEast || 'Person B').toUpperCase();
+  ctx.fillText('TAX-DEFERRED / ' + pw, pad, 18);
   ctx.textAlign = 'right';
-  ctx.fillText('TAX-DEFERRED / PERSON B', cw - pad, 18);
+  ctx.fillText('TAX-DEFERRED / ' + pe, cw - pad, 18);
   ctx.textAlign = 'left';
-  ctx.fillText('NON-DEFERRED / PERSON A', pad, ch - 6);
+  ctx.fillText('NON-DEFERRED / ' + pw, pad, ch - 6);
   ctx.textAlign = 'right';
-  ctx.fillText('NON-DEFERRED / PERSON B', cw - pad, ch - 6);
+  ctx.fillText('NON-DEFERRED / ' + pe, cw - pad, ch - 6);
   ctx.textAlign = 'left';
 }
 
