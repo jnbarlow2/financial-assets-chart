@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Financial Assets — System Chart</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  /* ── RESET & BASE ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #f0ece4;
+    --surface:   #faf8f4;
+    --panel:     #1a2744;
+    --panel-lt:  #243560;
+    --accent:    #c8a84b;
+    --accent2:   #4a7c9e;
+    --text:      #1a1a2e;
+    --text-lt:   #555570;
+    --border:    #c8c0b0;
+    --grid:      rgba(0,0,0,0.06);
+    --quad-nw:   rgba(74,124,158,0.07);
+    --quad-ne:   rgba(74,124,158,0.04);
+    --quad-sw:   rgba(200,168,75,0.06);
+    --quad-se:   rgba(200,168,75,0.03);
+    --shadow:    0 4px 24px rgba(0,0,0,0.13);
+    --r:         6px;
+  }
+
+  body {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--panel);
+    color: #fff;
+    padding: 0 20px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    border-bottom: 2px solid var(--accent);
+  }
+  header h1 {
+    font-size: 1.05rem;
+    font-weight: normal;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .header-actions { display: flex; gap: 8px; align-items: center; }
+
+  /* ── TOOLBAR ── */
+  #toolbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 6px 16px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .tb-sep { width: 1px; height: 28px; background: var(--border); margin: 0 4px; }
+  .tb-label { font-size: 0.7rem; color: var(--text-lt); text-transform: uppercase; letter-spacing: 0.08em; margin-right: 2px; }
+
+  /* ── BUTTONS ── */
+  button {
+    font-family: inherit;
+    font-size: 0.78rem;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    padding: 5px 12px;
+    border-radius: var(--r);
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  button:hover { background: var(--panel); color: #fff; border-color: var(--panel); }
+  button.primary { background: var(--panel); color: #fff; border-color: var(--panel); }
+  button.primary:hover { background: var(--panel-lt); }
+  button.accent { background: var(--accent); color: var(--panel); border-color: var(--accent); font-weight: bold; }
+  button.accent:hover { background: #dbb94f; }
+  button.danger { border-color: #c0392b; color: #c0392b; }
+  button.danger:hover { background: #c0392b; color: #fff; }
+  button.active { background: var(--accent2); color: #fff; border-color: var(--accent2); }
+
+  /* ── MAIN LAYOUT ── */
+  #main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── LEFT PANEL ── */
+  #panel-left {
+    width: 240px;
+    min-width: 200px;
+    background: var(--panel);
+    color: #ccd;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+    font-size: 0.8rem;
+  }
+  #panel-left h3 {
+    padding: 10px 14px 6px;
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  #asset-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+  }
+  .asset-item {
+    padding: 5px 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.1s;
+    border-left: 3px solid transparent;
+  }
+  .asset-item:hover { background: rgba(255,255,255,0.06); }
+  .asset-item.selected { background: rgba(200,168,75,0.15); border-left-color: var(--accent); }
+  .asset-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .asset-name { flex: 1; font-size: 0.75rem; line-height: 1.3; }
+  .asset-val { font-size: 0.68rem; color: #99a; }
+
+  /* ── CANVAS AREA ── */
+  #canvas-wrapper {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  #canvas {
+    position: absolute;
+    top: 0; left: 0;
+    cursor: default;
+  }
+
+  /* ── RIGHT PANEL ── */
+  #panel-right {
+    width: 260px;
+    min-width: 220px;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex-shrink: 0;
+    font-size: 0.82rem;
+  }
+  #panel-right h3 {
+    padding: 10px 14px 6px;
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent2);
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    color: var(--accent);
+  }
+  #props-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px;
+  }
+  .prop-group { margin-bottom: 14px; }
+  .prop-group label {
+    display: block;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-lt);
+    margin-bottom: 4px;
+  }
+  .prop-group input, .prop-group select, .prop-group textarea {
+    width: 100%;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    font-family: inherit;
+    font-size: 0.8rem;
+    background: #fff;
+    color: var(--text);
+  }
+  .prop-group textarea { height: 56px; resize: vertical; }
+  .prop-val { font-size: 0.88rem; font-weight: bold; color: var(--panel); }
+  .prop-sub { font-size: 0.72rem; color: var(--text-lt); margin-top: 2px; }
+
+  #snapshots-panel {
+    border-top: 1px solid var(--border);
+    max-height: 180px;
+    overflow-y: auto;
+  }
+  #snapshots-panel h3 {
+    padding: 8px 14px;
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .snapshot-item {
+    padding: 6px 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    font-size: 0.75rem;
+  }
+  .snapshot-item:hover { background: rgba(0,0,0,0.03); }
+  .snap-name { flex: 1; font-weight: bold; color: var(--panel); }
+  .snap-date { font-size: 0.65rem; color: var(--text-lt); }
+  .snap-load { font-size: 0.68rem; padding: 2px 7px; }
+
+  /* ── STATUS BAR ── */
+  #statusbar {
+    height: 24px;
+    background: var(--panel);
+    color: rgba(255,255,255,0.55);
+    font-size: 0.68rem;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 16px;
+    flex-shrink: 0;
+    letter-spacing: 0.05em;
+  }
+  #statusbar span { display: flex; align-items: center; gap: 4px; }
+  #statusbar .dot { width: 6px; height: 6px; border-radius: 50%; background: #4caf50; }
+  #statusbar .dot.red { background: #f44336; }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000;
+  }
+  .modal {
+    background: var(--surface);
+    border-radius: var(--r);
+    padding: 24px 28px;
+    min-width: 360px;
+    max-width: 480px;
+    box-shadow: var(--shadow);
+  }
+  .modal h2 { font-size: 1rem; margin-bottom: 14px; color: var(--panel); }
+  .modal p { font-size: 0.82rem; color: var(--text-lt); margin-bottom: 16px; line-height: 1.5; }
+  .modal input {
+    width: 100%; padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    font-family: inherit; font-size: 0.85rem;
+    margin-bottom: 14px;
+  }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+  /* ── WELCOME SCREEN ── */
+  #welcome {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg);
+    z-index: 10;
+  }
+  .welcome-box {
+    text-align: center;
+    max-width: 480px;
+    padding: 40px;
+    background: var(--surface);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+  }
+  .welcome-box h2 { font-size: 1.4rem; color: var(--panel); margin-bottom: 10px; }
+  .welcome-box p { color: var(--text-lt); font-size: 0.88rem; line-height: 1.6; margin-bottom: 20px; }
+  .welcome-box .steps { text-align: left; margin-bottom: 24px; }
+  .welcome-box .step { display: flex; gap: 12px; margin-bottom: 10px; font-size: 0.82rem; color: var(--text-lt); }
+  .step-num { width: 22px; height: 22px; border-radius: 50%; background: var(--panel); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 0.72rem; flex-shrink: 0; }
+
+  /* ── TOOLTIP ── */
+  .tooltip {
+    position: fixed;
+    background: rgba(26,39,68,0.95);
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    pointer-events: none;
+    z-index: 500;
+    max-width: 220px;
+    line-height: 1.4;
+    display: none;
+  }
+
+  /* ── LOADING ── */
+  #loading {
+    position: fixed; inset: 0;
+    background: rgba(240,236,228,0.85);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 2000;
+    display: none;
+  }
+  .loading-inner { text-align: center; }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--panel); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="loading"><div class="loading-inner"><div class="spinner"></div><div style="font-size:0.85rem;color:var(--text-lt)">Reading file…</div></div></div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip"></div>
+
+<!-- Header -->
+<header>
+  <h1>&#9670; Financial Assets — System Chart</h1>
+  <div class="header-actions">
+    <button class="accent" onclick="triggerFileLoad()">&#8679; Load Data (.xlsx)</button>
+    <button onclick="saveLayout()">&#9679; Save Layout</button>
+    <button onclick="exportLayout()">&#8681; Export Layout</button>
+    <button onclick="importLayout()">&#8679; Import Layout</button>
+    <button onclick="saveSnapshot()">&#9711; Snapshot</button>
+  </div>
+</header>
+
+<!-- Toolbar -->
+<div id="toolbar">
+  <span class="tb-label">View:</span>
+  <button id="btn-fit" onclick="fitCanvas()" title="Fit all nodes to window">Fit All</button>
+  <button id="btn-grid" onclick="toggleGrid()" title="Toggle grid">Grid</button>
+  <button id="btn-labels" onclick="toggleLabels()" title="Toggle labels">Labels</button>
+  <button id="btn-values" onclick="toggleValues()" title="Toggle values">Values</button>
+  <button id="btn-flows" onclick="toggleFlows()" title="Toggle flow arrows">Flows</button>
+  <div class="tb-sep"></div>
+  <span class="tb-label">Add:</span>
+  <button onclick="addAssetNode()">+ Asset</button>
+  <button onclick="addFlowArrow()">+ Flow</button>
+  <button onclick="addTextLabel()">+ Label</button>
+  <div class="tb-sep"></div>
+  <span class="tb-label">Arrange:</span>
+  <button onclick="autoArrange()">Auto-Arrange</button>
+  <button onclick="resetPositions()">Reset Positions</button>
+  <div class="tb-sep"></div>
+  <span class="tb-label">Export:</span>
+  <button onclick="printCanvas()">&#9113; Print / PDF</button>
+</div>
+
+<!-- Main -->
+<div id="main">
+
+  <!-- Left panel -->
+  <div id="panel-left">
+    <h3>Assets (<span id="asset-count">0</span>)</h3>
+    <div id="asset-list"></div>
+  </div>
+
+  <!-- Canvas -->
+  <div id="canvas-wrapper">
+    <canvas id="canvas"></canvas>
+
+    <!-- Welcome screen -->
+    <div id="welcome">
+      <div class="welcome-box">
+        <h2>Financial Assets System Chart</h2>
+        <p>A private, local canvas for mapping your personal financial assets, flows, and relationships. No data leaves your computer.</p>
+        <div class="steps">
+          <div class="step"><div class="step-num">1</div><div>Click <strong>Load Data (.xlsx)</strong> to open your Financial_Assets_System.xlsx file</div></div>
+          <div class="step"><div class="step-num">2</div><div>Assets and flows are auto-generated from your spreadsheet data</div></div>
+          <div class="step"><div class="step-num">3</div><div>Drag circles to arrange. Edit labels and properties in the right panel</div></div>
+          <div class="step"><div class="step-num">4</div><div>Save your layout locally — nothing is ever uploaded or transmitted</div></div>
+        </div>
+        <button class="accent" style="width:100%;padding:10px" onclick="triggerFileLoad()">&#8679; Load Your .xlsx File</button>
+        <div style="margin-top:12px">
+          <button style="font-size:0.75rem;color:var(--text-lt);border:none;background:none;cursor:pointer" onclick="loadDemo()">or try with sample data →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right panel -->
+  <div id="panel-right">
+    <h3>Properties</h3>
+    <div id="props-content">
+      <div style="color:var(--text-lt);font-size:0.8rem;padding:8px 0">Select a node or arrow to view properties.</div>
+    </div>
+    <div id="snapshots-panel">
+      <h3>Snapshots</h3>
+      <div id="snapshot-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Status bar -->
+<div id="statusbar">
+  <span><div class="dot" id="status-dot"></div> <span id="status-text">No data loaded</span></span>
+  <span id="status-assets"></span>
+  <span id="status-flows"></span>
+  <span id="status-saved"></span>
+</div>
+
+<!-- Hidden file input -->
+<input type="file" id="file-input" accept=".xlsx" style="display:none" onchange="handleFileLoad(event)">
+<input type="file" id="layout-import-input" accept=".json" style="display:none" onchange="handleLayoutImport(event)">
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════
+const state = {
+  assets: [],
+  flows: [],
+  nodes: [],       // canvas node objects
+  arrows: [],      // canvas arrow objects
+  labels: [],      // free text labels
+  selected: null,
+  dragging: null,
+  dragOffset: { x: 0, y: 0 },
+  showGrid: true,
+  showLabels: true,
+  showValues: true,
+  showFlows: true,
+  canvasW: 0,
+  canvasH: 0,
+  scale: 1,
+  pan: { x: 0, y: 0 },
+  dataLoaded: false,
+  lastSaved: null,
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// CANVAS SETUP
+// ═══════════════════════════════════════════════════════════════════
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const wrapper = document.getElementById('canvas-wrapper');
+
+function resizeCanvas() {
+  const r = wrapper.getBoundingClientRect();
+  canvas.width = r.width;
+  canvas.height = r.height;
+  state.canvasW = r.width;
+  state.canvasH = r.height;
+  draw();
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// ═══════════════════════════════════════════════════════════════════
+// FILL PATTERNS (for B&W compatibility)
+// ═══════════════════════════════════════════════════════════════════
+const PATTERNS = {};
+
+function makePattern(key, drawFn) {
+  const pc = document.createElement('canvas');
+  pc.width = 12; pc.height = 12;
+  const px = pc.getContext('2d');
+  drawFn(px);
+  PATTERNS[key] = ctx.createPattern(pc, 'repeat');
+}
+
+function initPatterns() {
+  // Solid dark
+  makePattern('401(k)', px => { px.fillStyle = '#2c3e6b'; px.fillRect(0,0,12,12); });
+  makePattern('IRA', px => { px.fillStyle = '#4a5e8a'; px.fillRect(0,0,12,12); });
+  // Diagonal hatch
+  makePattern('Brokerage', px => {
+    px.strokeStyle = '#2c3e6b'; px.lineWidth = 1.5;
+    px.beginPath(); px.moveTo(0,12); px.lineTo(12,0); px.stroke();
+    px.beginPath(); px.moveTo(-2,2); px.lineTo(2,-2); px.stroke();
+    px.beginPath(); px.moveTo(10,14); px.lineTo(14,10); px.stroke();
+  });
+  // Horizontal lines
+  makePattern('Savings', px => {
+    px.strokeStyle = '#2c3e6b'; px.lineWidth = 1;
+    [3,7,11].forEach(y => { px.beginPath(); px.moveTo(0,y); px.lineTo(12,y); px.stroke(); });
+  });
+  // Vertical lines
+  makePattern('Annuity', px => {
+    px.strokeStyle = '#2c3e6b'; px.lineWidth = 1;
+    [3,7,11].forEach(x => { px.beginPath(); px.moveTo(x,0); px.lineTo(x,12); px.stroke(); });
+  });
+  // Cross-hatch
+  makePattern('HSA', px => {
+    px.strokeStyle = '#2c3e6b'; px.lineWidth = 0.8;
+    [0,4,8,12].forEach(v => {
+      px.beginPath(); px.moveTo(0,v); px.lineTo(12,v); px.stroke();
+      px.beginPath(); px.moveTo(v,0); px.lineTo(v,12); px.stroke();
+    });
+  });
+  // Single diagonal
+  makePattern('Stock', px => {
+    px.strokeStyle = '#2c3e6b'; px.lineWidth = 1.5;
+    px.beginPath(); px.moveTo(0,0); px.lineTo(12,12); px.stroke();
+  });
+  // Empty / thin border only
+  makePattern('Checking', px => { px.fillStyle = 'rgba(255,255,255,0.1)'; px.fillRect(0,0,12,12); });
+  makePattern('Pass-Through', px => { px.fillStyle = 'rgba(255,255,255,0.05)'; px.fillRect(0,0,12,12); });
+  // Default
+  makePattern('default', px => { px.fillStyle = '#8899aa'; px.fillRect(0,0,12,12); });
+}
+initPatterns();
+
+function getPattern(type) {
+  const t = (type||'').toLowerCase();
+  for (const key of Object.keys(PATTERNS)) {
+    if (t.includes(key.toLowerCase())) return PATTERNS[key];
+  }
+  return PATTERNS['default'];
+}
+
+function getNodeColor(type) {
+  const t = (type||'').toLowerCase();
+  if (t.includes('401') || t.includes('ira')) return '#2c3e6b';
+  if (t.includes('brokerage') || t.includes('stock')) return '#3d5a80';
+  if (t.includes('savings') || t.includes('checking')) return '#5a7a9a';
+  if (t.includes('annuity')) return '#6b4c6b';
+  if (t.includes('hsa')) return '#3a6b5a';
+  if (t.includes('pass')) return '#888888';
+  return '#4a6080';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// QUADRANT LAYOUT
+// ═══════════════════════════════════════════════════════════════════
+function getQuadrantCenter(taxCat, person, cw, ch) {
+  const mx = cw / 2, my = ch / 2;
+  const pd = 80; // padding from edge
+  if (person === 'Shared') return { x: mx, y: taxCat === 'Tax-Deferred' ? my * 0.5 : my * 1.5 };
+  const isA = person === 'A', isDeferred = taxCat === 'Tax-Deferred';
+  return {
+    x: isA ? mx * 0.5 : mx * 1.5,
+    y: isDeferred ? my * 0.5 : my * 1.5
+  };
+}
+
+function autoArrangeNodes() {
+  const cw = state.canvasW, ch = state.canvasH;
+  const quadBuckets = { 'NW': [], 'NE': [], 'SW': [], 'SE': [], 'CENTER': [] };
+
+  state.nodes.forEach(node => {
+    const tc = node.asset.taxCategory || '';
+    const p  = node.asset.person || '';
+    let q;
+    if (p === 'Shared') q = 'CENTER';
+    else if (p === 'A' && tc === 'Tax-Deferred') q = 'NW';
+    else if (p === 'B' && tc === 'Tax-Deferred') q = 'NE';
+    else if (p === 'A') q = 'SW';
+    else q = 'SE';
+    quadBuckets[q].push(node);
+  });
+
+  const quadCenters = {
+    NW: { x: cw * 0.25, y: ch * 0.25 },
+    NE: { x: cw * 0.75, y: ch * 0.25 },
+    SW: { x: cw * 0.25, y: ch * 0.75 },
+    SE: { x: cw * 0.75, y: ch * 0.75 },
+    CENTER: { x: cw * 0.5, y: ch * 0.5 }
+  };
+
+  for (const [q, nodes] of Object.entries(quadBuckets)) {
+    if (!nodes.length) continue;
+    const cx = quadCenters[q].x, cy = quadCenters[q].y;
+    const cols = Math.ceil(Math.sqrt(nodes.length));
+    const spacing = Math.min(120, (q === 'CENTER' ? cw * 0.3 : cw * 0.22) / Math.max(cols,1));
+    nodes.forEach((node, i) => {
+      const col = i % cols, row = Math.floor(i / cols);
+      const totalW = (cols - 1) * spacing;
+      const totalH = (Math.ceil(nodes.length / cols) - 1) * spacing;
+      node.x = cx - totalW / 2 + col * spacing;
+      node.y = cy - totalH / 2 + row * spacing;
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DATA LOADING
+// ═══════════════════════════════════════════════════════════════════
+function triggerFileLoad() { document.getElementById('file-input').click(); }
+
+function handleFileLoad(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  document.getElementById('loading').style.display = 'flex';
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+      parseWorkbook(wb);
+      document.getElementById('welcome').style.display = 'none';
+      document.getElementById('loading').style.display = 'none';
+      setStatus('Data loaded: ' + file.name, true);
+      tryLoadSavedLayout();
+    } catch(err) {
+      document.getElementById('loading').style.display = 'none';
+      alert('Error reading file: ' + err.message + '\n\nMake sure you are loading the Financial_Assets_System.xlsx file.');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  event.target.value = '';
+}
+
+function parseWorkbook(wb) {
+  // Parse Asset Data sheet
+  const assetSheet = wb.Sheets['Asset Data'];
+  if (!assetSheet) throw new Error('Sheet "Asset Data" not found');
+  const assetRows = XLSX.utils.sheet_to_json(assetSheet, { header: 1, defval: '' });
+
+  state.assets = [];
+  for (let i = 3; i < assetRows.length; i++) {
+    const row = assetRows[i];
+    if (!row[0] || !row[1]) continue;
+    const val = parseFloat(String(row[5]).replace(/[$,()]/g,'')) || 0;
+    const scaledRaw = Math.sqrt(val) / Math.sqrt(Math.max(...assetRows.slice(3).map(r => parseFloat(String(r[5]).replace(/[$,()]/g,''))||0))) * 100;
+    const floor = 8, maxDiam = 120, scaleDenom = 100;
+    const diam = Math.max(floor, scaledRaw / scaleDenom * maxDiam);
+    state.assets.push({
+      id:          String(row[0]).trim(),
+      name:        String(row[1]).trim(),
+      type:        String(row[2]).trim(),
+      taxCategory: String(row[3]).trim(),
+      person:      String(row[4]).trim(),
+      value:       val,
+      scaledSize:  scaledRaw,
+      diameter:    diam,
+      notes:       String(row[11]).trim(),
+    });
+  }
+
+  // Parse Flow Data sheet
+  const flowSheet = wb.Sheets['Flow Data'];
+  state.flows = [];
+  if (flowSheet) {
+    const flowRows = XLSX.utils.sheet_to_json(flowSheet, { header: 1, defval: '' });
+    for (let i = 2; i < flowRows.length; i++) {
+      const row = flowRows[i];
+      if (!row[0]) continue;
+      state.flows.push({
+        id:         String(row[0]).trim(),
+        fromId:     String(row[1]).trim(),
+        fromName:   String(row[2]).trim(),
+        toId:       String(row[3]).trim(),
+        toName:     String(row[4]).trim(),
+        flowType:   String(row[5]).trim(),
+        label:      String(row[6]).trim(),
+        volume:     parseFloat(String(row[7]).replace(/[$,()]/g,'')) || 0,
+        arrowStyle: String(row[8]).trim() || 'Solid',
+        biDir:      String(row[9]).trim() === 'Yes',
+        active:     String(row[10]).trim() !== 'No',
+      });
+    }
+  }
+
+  buildCanvas();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BUILD CANVAS OBJECTS FROM DATA
+// ═══════════════════════════════════════════════════════════════════
+function buildCanvas() {
+  state.nodes = state.assets.map(asset => ({
+    id: asset.id,
+    asset,
+    x: 0, y: 0,
+    r: Math.max(16, asset.diameter / 2),
+    selected: false,
+  }));
+
+  autoArrangeNodes();
+  buildArrows();
+  updateAssetList();
+  updateStatus();
+  draw();
+  state.dataLoaded = true;
+}
+
+function buildArrows() {
+  state.arrows = state.flows
+    .filter(f => f.active)
+    .map(flow => {
+      const fromNode = state.nodes.find(n => n.id === flow.fromId);
+      const toNode   = state.nodes.find(n => n.id === flow.toId);
+      return { id: flow.id, flow, fromNode: fromNode||null, toNode: toNode||null, selected: false };
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DRAW
+// ═══════════════════════════════════════════════════════════════════
+function draw() {
+  const cw = canvas.width, ch = canvas.height;
+  ctx.clearRect(0, 0, cw, ch);
+
+  // Background
+  ctx.fillStyle = '#f0ece4';
+  ctx.fillRect(0, 0, cw, ch);
+
+  // Grid
+  if (state.showGrid) drawGrid(cw, ch);
+
+  // Quadrant dividers
+  drawQuadrants(cw, ch);
+
+  // Arrows
+  if (state.showFlows) state.arrows.forEach(a => drawArrow(a));
+
+  // Nodes
+  state.nodes.forEach(n => drawNode(n));
+
+  // Free labels
+  state.labels.forEach(l => drawFreeLabel(l));
+}
+
+function drawGrid(cw, ch) {
+  ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+  ctx.lineWidth = 0.5;
+  const step = 40;
+  for (let x = 0; x < cw; x += step) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, ch); ctx.stroke();
+  }
+  for (let y = 0; y < ch; y += step) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cw, y); ctx.stroke();
+  }
+}
+
+function drawQuadrants(cw, ch) {
+  const mx = cw / 2, my = ch / 2;
+
+  // Quadrant fills
+  ctx.fillStyle = 'rgba(74,124,158,0.06)';
+  ctx.fillRect(0, 0, mx, my);      // NW
+  ctx.fillStyle = 'rgba(74,124,158,0.03)';
+  ctx.fillRect(mx, 0, mx, my);     // NE
+  ctx.fillStyle = 'rgba(200,168,75,0.05)';
+  ctx.fillRect(0, my, mx, my);     // SW
+  ctx.fillStyle = 'rgba(200,168,75,0.03)';
+  ctx.fillRect(mx, my, mx, my);    // SE
+
+  // Divider lines
+  ctx.strokeStyle = 'rgba(26,39,68,0.18)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath(); ctx.moveTo(mx, 0); ctx.lineTo(mx, ch); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, my); ctx.lineTo(cw, my); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Quadrant labels
+  ctx.font = '10px Georgia';
+  ctx.fillStyle = 'rgba(26,39,68,0.25)';
+  ctx.textAlign = 'left';
+  const pad = 8;
+  ctx.fillText('TAX-DEFERRED / PERSON A', pad, 18);
+  ctx.textAlign = 'right';
+  ctx.fillText('TAX-DEFERRED / PERSON B', cw - pad, 18);
+  ctx.textAlign = 'left';
+  ctx.fillText('NON-DEFERRED / PERSON A', pad, ch - 6);
+  ctx.textAlign = 'right';
+  ctx.fillText('NON-DEFERRED / PERSON B', cw - pad, ch - 6);
+  ctx.textAlign = 'left';
+}
+
+function drawNode(node) {
+  const { x, y, r, selected, asset } = node;
+  ctx.save();
+
+  // Shadow
+  if (selected) {
+    ctx.shadowColor = 'rgba(200,168,75,0.6)';
+    ctx.shadowBlur = 16;
+  } else {
+    ctx.shadowColor = 'rgba(0,0,0,0.15)';
+    ctx.shadowBlur = 6;
+  }
+
+  // Fill
+  const pattern = getPattern(asset.type);
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  if (pattern) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.fillStyle = pattern;
+  } else {
+    ctx.fillStyle = '#ffffff';
+  }
+  ctx.fill();
+
+  // Border
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = selected ? '#c8a84b' : getNodeColor(asset.type);
+  ctx.lineWidth = selected ? 3 : asset.type.toLowerCase().includes('pass') ? 3 : 1.5;
+  if (asset.type.toLowerCase().includes('pass')) ctx.setLineDash([4,3]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.restore();
+
+  // Label
+  if (state.showLabels) {
+    const shortName = asset.name.length > 18 ? asset.name.substring(0,17)+'…' : asset.name;
+    ctx.font = `${Math.max(9, Math.min(11, r * 0.55))}px Georgia`;
+    ctx.fillStyle = '#1a1a2e';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Name below circle
+    ctx.fillText(shortName, x, y + r + 12);
+
+    // Value inside if large enough
+    if (state.showValues && r > 22) {
+      const fmtVal = asset.value >= 1000000
+        ? '$' + (asset.value/1000000).toFixed(1) + 'M'
+        : asset.value >= 1000
+        ? '$' + (asset.value/1000).toFixed(0) + 'K'
+        : '$' + asset.value;
+      ctx.font = `${Math.max(8, r * 0.38)}px Georgia`;
+      ctx.fillStyle = r > 30 ? 'rgba(255,255,255,0.9)' : '#1a1a2e';
+      ctx.fillText(fmtVal, x, y);
+    }
+  }
+}
+
+function drawArrow(arrow) {
+  const { flow, fromNode, toNode, selected } = arrow;
+  let x1, y1, x2, y2;
+
+  if (fromNode) { x1 = fromNode.x; y1 = fromNode.y; }
+  else return; // need at least a from node
+
+  if (toNode) { x2 = toNode.x; y2 = toNode.y; }
+  else {
+    // Outflow with no target — draw short arrow outward
+    const q = fromNode.asset.taxCategory === 'Tax-Deferred' ? -1 : 1;
+    x2 = x1; y2 = y1 + q * 60;
+  }
+
+  // Adjust endpoints to circle edges
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const r1 = fromNode ? fromNode.r + 2 : 0;
+  const r2 = toNode   ? toNode.r   + 2 : 0;
+  const ax1 = x1 + Math.cos(angle) * r1;
+  const ay1 = y1 + Math.sin(angle) * r1;
+  const ax2 = x2 - Math.cos(angle) * r2;
+  const ay2 = y2 - Math.sin(angle) * r2;
+
+  ctx.save();
+  ctx.strokeStyle = selected ? '#c8a84b' : '#4a5e8a';
+  ctx.lineWidth = selected ? 2.5 : 1.5;
+
+  const style = (flow.arrowStyle || 'Solid').toLowerCase();
+  if (style === 'dashed') ctx.setLineDash([7,4]);
+  else if (style === 'dotted') ctx.setLineDash([2,4]);
+  else ctx.setLineDash([]);
+
+  // Draw line
+  ctx.beginPath();
+  ctx.moveTo(ax1, ay1);
+  ctx.lineTo(ax2, ay2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Arrowhead
+  const headLen = 10, headAngle = 0.4;
+  ctx.fillStyle = selected ? '#c8a84b' : '#4a5e8a';
+  ctx.beginPath();
+  ctx.moveTo(ax2, ay2);
+  ctx.lineTo(ax2 - headLen * Math.cos(angle - headAngle), ay2 - headLen * Math.sin(angle - headAngle));
+  ctx.lineTo(ax2 - headLen * Math.cos(angle + headAngle), ay2 - headLen * Math.sin(angle + headAngle));
+  ctx.closePath();
+  ctx.fill();
+
+  // Flow label
+  if (state.showLabels && flow.label) {
+    const mx = (ax1 + ax2) / 2, my = (ay1 + ay2) / 2;
+    const perp = angle + Math.PI / 2;
+    const lx = mx + Math.cos(perp) * 14;
+    const ly = my + Math.sin(perp) * 14;
+    ctx.font = '9px Georgia';
+    ctx.fillStyle = '#2c3e6b';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // Small background
+    const tw = ctx.measureText(flow.label).width;
+    ctx.fillStyle = 'rgba(240,236,228,0.85)';
+    ctx.fillRect(lx - tw/2 - 3, ly - 7, tw + 6, 14);
+    ctx.fillStyle = '#2c3e6b';
+    ctx.fillText(flow.label, lx, ly);
+  }
+
+  ctx.restore();
+}
+
+function drawFreeLabel(label) {
+  ctx.font = `${label.size||12}px Georgia`;
+  ctx.fillStyle = label.color || '#1a1a2e';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText(label.text, label.x, label.y);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MOUSE INTERACTION
+// ═══════════════════════════════════════════════════════════════════
+canvas.addEventListener('mousedown', onMouseDown);
+canvas.addEventListener('mousemove', onMouseMove);
+canvas.addEventListener('mouseup',   onMouseUp);
+canvas.addEventListener('dblclick',  onDblClick);
+
+function getPos(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+function hitNode(x, y) {
+  for (let i = state.nodes.length - 1; i >= 0; i--) {
+    const n = state.nodes[i];
+    const dx = x - n.x, dy = y - n.y;
+    if (dx*dx + dy*dy <= n.r * n.r) return n;
+  }
+  return null;
+}
+
+function hitArrow(x, y) {
+  for (const arrow of state.arrows) {
+    if (!arrow.fromNode) continue;
+    const x1 = arrow.fromNode.x, y1 = arrow.fromNode.y;
+    const x2 = arrow.toNode ? arrow.toNode.x : x1;
+    const y2 = arrow.toNode ? arrow.toNode.y : y1 + 60;
+    // Distance from point to line segment
+    const dx = x2 - x1, dy = y2 - y1;
+    const len2 = dx*dx + dy*dy;
+    if (len2 === 0) continue;
+    const t = Math.max(0, Math.min(1, ((x-x1)*dx + (y-y1)*dy) / len2));
+    const px = x1 + t*dx, py = y1 + t*dy;
+    const dist = Math.sqrt((x-px)**2 + (y-py)**2);
+    if (dist < 8) return arrow;
+  }
+  return null;
+}
+
+function onMouseDown(e) {
+  const pos = getPos(e);
+  const node = hitNode(pos.x, pos.y);
+  const arrow = node ? null : hitArrow(pos.x, pos.y);
+
+  // Deselect all
+  state.nodes.forEach(n => n.selected = false);
+  state.arrows.forEach(a => a.selected = false);
+
+  if (node) {
+    node.selected = true;
+    state.selected = { type: 'node', obj: node };
+    state.dragging = node;
+    state.dragOffset = { x: pos.x - node.x, y: pos.y - node.y };
+    showNodeProps(node);
+  } else if (arrow) {
+    arrow.selected = true;
+    state.selected = { type: 'arrow', obj: arrow };
+    showArrowProps(arrow);
+  } else {
+    state.selected = null;
+    showNoProps();
+  }
+  draw();
+}
+
+function onMouseMove(e) {
+  const pos = getPos(e);
+  if (state.dragging) {
+    state.dragging.x = pos.x - state.dragOffset.x;
+    state.dragging.y = pos.y - state.dragOffset.y;
+    draw();
+  }
+  // Tooltip
+  const node = hitNode(pos.x, pos.y);
+  const tt = document.getElementById('tooltip');
+  if (node) {
+    const fmtVal = new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits:0 }).format(node.asset.value);
+    tt.innerHTML = `<strong>${node.asset.name}</strong><br>${node.asset.type} · ${node.asset.taxCategory}<br>${fmtVal}`;
+    tt.style.display = 'block';
+    tt.style.left = (e.clientX + 14) + 'px';
+    tt.style.top  = (e.clientY - 10) + 'px';
+  } else {
+    tt.style.display = 'none';
+  }
+}
+
+function onMouseUp() {
+  if (state.dragging) {
+    state.dragging = null;
+    autoSaveLayout();
+  }
+}
+
+function onDblClick(e) {
+  const pos = getPos(e);
+  const node = hitNode(pos.x, pos.y);
+  if (node) {
+    const newName = prompt('Edit account name:', node.asset.name);
+    if (newName !== null) { node.asset.name = newName; draw(); updateAssetList(); }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PROPERTIES PANEL
+// ═══════════════════════════════════════════════════════════════════
+function showNoProps() {
+  document.getElementById('props-content').innerHTML =
+    '<div style="color:var(--text-lt);font-size:0.8rem;padding:8px 0">Select a node or arrow to view properties.</div>';
+}
+
+function showNodeProps(node) {
+  const a = node.asset;
+  const fmtVal = new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits:0 }).format(a.value);
+  document.getElementById('props-content').innerHTML = `
+    <div class="prop-group"><label>Account Name</label>
+      <input type="text" value="${esc(a.name)}" onchange="updateNodeProp('name',this.value,'${a.id}')"></div>
+    <div class="prop-group"><label>Current Value</label>
+      <div class="prop-val">${fmtVal}</div>
+      <div class="prop-sub">Edit in your .xlsx file and reload to update</div></div>
+    <div class="prop-group"><label>Account Type</label>
+      <div class="prop-val" style="font-size:0.85rem">${esc(a.type)}</div></div>
+    <div class="prop-group"><label>Tax Category</label>
+      <div class="prop-val" style="font-size:0.85rem">${esc(a.taxCategory)}</div></div>
+    <div class="prop-group"><label>Primary Person</label>
+      <div class="prop-val" style="font-size:0.85rem">${esc(a.person)}</div></div>
+    <div class="prop-group"><label>Notes</label>
+      <textarea onchange="updateNodeProp('notes',this.value,'${a.id}')">${esc(a.notes)}</textarea></div>
+    <div class="prop-group">
+      <button onclick="deleteNode('${a.id}')" class="danger" style="width:100%">Remove from Canvas</button>
+    </div>`;
+}
+
+function showArrowProps(arrow) {
+  const f = arrow.flow;
+  const fmtVol = f.volume ? new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits:0 }).format(f.volume) + '/yr' : '—';
+  document.getElementById('props-content').innerHTML = `
+    <div class="prop-group"><label>Flow Label</label>
+      <input type="text" value="${esc(f.label)}" onchange="updateFlowProp('label',this.value,'${f.id}')"></div>
+    <div class="prop-group"><label>From → To</label>
+      <div class="prop-val" style="font-size:0.78rem">${esc(f.fromName)} → ${esc(f.toName||'(external)')}</div></div>
+    <div class="prop-group"><label>Flow Type</label>
+      <div class="prop-val" style="font-size:0.85rem">${esc(f.flowType)}</div></div>
+    <div class="prop-group"><label>Est. Annual Volume</label>
+      <div class="prop-val" style="font-size:0.85rem">${fmtVol}</div></div>
+    <div class="prop-group"><label>Arrow Style</label>
+      <select onchange="updateFlowProp('arrowStyle',this.value,'${f.id}')">
+        ${['Solid','Dashed','Dotted'].map(s=>`<option ${f.arrowStyle===s?'selected':''}>${s}</option>`).join('')}
+      </select></div>`;
+}
+
+function updateNodeProp(prop, val, id) {
+  const node = state.nodes.find(n => n.id === id);
+  if (node) { node.asset[prop] = val; draw(); updateAssetList(); autoSaveLayout(); }
+}
+
+function updateFlowProp(prop, val, id) {
+  const arrow = state.arrows.find(a => a.id === id);
+  if (arrow) { arrow.flow[prop] = val; draw(); autoSaveLayout(); }
+}
+
+function deleteNode(id) {
+  if (!confirm('Remove this node from the canvas? (Data in .xlsx is not affected)')) return;
+  state.nodes = state.nodes.filter(n => n.id !== id);
+  state.arrows = state.arrows.filter(a => a.flow.fromId !== id && a.flow.toId !== id);
+  showNoProps();
+  updateAssetList();
+  draw();
+  autoSaveLayout();
+}
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+// ═══════════════════════════════════════════════════════════════════
+// ASSET LIST (left panel)
+// ═══════════════════════════════════════════════════════════════════
+function updateAssetList() {
+  const list = document.getElementById('asset-list');
+  document.getElementById('asset-count').textContent = state.nodes.length;
+  list.innerHTML = state.nodes.map(n => {
+    const fmtVal = n.asset.value >= 1000000
+      ? '$' + (n.asset.value/1000000).toFixed(1) + 'M'
+      : n.asset.value >= 1000
+      ? '$' + (n.asset.value/1000).toFixed(0) + 'K'
+      : '$' + n.asset.value;
+    return `<div class="asset-item" onclick="selectNode('${n.id}')">
+      <div class="asset-dot" style="background:${getNodeColor(n.asset.type)}"></div>
+      <div class="asset-name">${esc(n.asset.name)}</div>
+      <div class="asset-val">${fmtVal}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectNode(id) {
+  state.nodes.forEach(n => n.selected = false);
+  state.arrows.forEach(a => a.selected = false);
+  const node = state.nodes.find(n => n.id === id);
+  if (node) {
+    node.selected = true;
+    state.selected = { type: 'node', obj: node };
+    showNodeProps(node);
+    draw();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TOOLBAR ACTIONS
+// ═══════════════════════════════════════════════════════════════════
+function fitCanvas() { autoArrangeNodes(); draw(); }
+function toggleGrid()   { state.showGrid   = !state.showGrid;   document.getElementById('btn-grid').classList.toggle('active',state.showGrid); draw(); }
+function toggleLabels() { state.showLabels = !state.showLabels; document.getElementById('btn-labels').classList.toggle('active',state.showLabels); draw(); }
+function toggleValues() { state.showValues = !state.showValues; document.getElementById('btn-values').classList.toggle('active',state.showValues); draw(); }
+function toggleFlows()  { state.showFlows  = !state.showFlows;  document.getElementById('btn-flows').classList.toggle('active',state.showFlows); draw(); }
+function resetPositions() { if (confirm('Reset all node positions?')) { autoArrangeNodes(); draw(); autoSaveLayout(); } }
+function autoArrange()  { autoArrangeNodes(); draw(); autoSaveLayout(); }
+
+function addAssetNode() {
+  const name = prompt('Account name:');
+  if (!name) return;
+  const val = parseFloat(prompt('Current value ($):', '0') || '0');
+  const type = prompt('Account type (Checking/Savings/401(k)/IRA/Brokerage/etc):', 'Checking');
+  const tax  = prompt('Tax category (Tax-Deferred / Non-Deferred):', 'Non-Deferred');
+  const person = prompt('Primary person (A / B / Shared):', 'Shared');
+  const id = 'CUSTOM_' + Date.now();
+  const asset = { id, name, type: type||'Checking', taxCategory: tax||'Non-Deferred', person: person||'Shared', value: val, diameter: Math.max(20, Math.sqrt(val)/100*80), notes: '' };
+  state.assets.push(asset);
+  const node = { id, asset, x: state.canvasW/2, y: state.canvasH/2, r: Math.max(16, asset.diameter/2), selected: false };
+  state.nodes.push(node);
+  updateAssetList();
+  draw();
+  autoSaveLayout();
+}
+
+function addFlowArrow() {
+  if (state.nodes.length < 2) { alert('Need at least 2 nodes to add a flow.'); return; }
+  const nodeList = state.nodes.map(n => `${n.id}: ${n.asset.name}`).join('\n');
+  const fromId = prompt('From Account ID:\n' + nodeList);
+  if (!fromId) return;
+  const toId = prompt('To Account ID (leave blank for outflow):');
+  const label = prompt('Flow label:', 'Transfer');
+  const style = prompt('Arrow style (Solid / Dashed / Dotted):', 'Solid');
+  const id = 'FLOW_' + Date.now();
+  const fromNode = state.nodes.find(n => n.id === fromId.trim());
+  const toNode   = state.nodes.find(n => n.id === (toId||'').trim());
+  const flow = { id, fromId: fromId.trim(), fromName: fromNode?.asset.name||'', toId: (toId||'').trim(), toName: toNode?.asset.name||'', flowType: 'Transfer', label: label||'', volume: 0, arrowStyle: style||'Solid', biDir: false, active: true };
+  state.flows.push(flow);
+  state.arrows.push({ id, flow, fromNode: fromNode||null, toNode: toNode||null, selected: false });
+  draw();
+  autoSaveLayout();
+}
+
+function addTextLabel() {
+  const text = prompt('Label text:');
+  if (!text) return;
+  state.labels.push({ text, x: state.canvasW/2 - 50, y: state.canvasH/2, size: 13, color: '#1a2744' });
+  draw();
+  autoSaveLayout();
+}
+
+function printCanvas() {
+  window.print();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LAYOUT SAVE / LOAD
+// ═══════════════════════════════════════════════════════════════════
+function getLayoutData() {
+  return {
+    version: 1,
+    saved: new Date().toISOString(),
+    positions: state.nodes.map(n => ({ id: n.id, x: n.x, y: n.y, r: n.r })),
+    arrowStyles: state.arrows.map(a => ({ id: a.id, style: a.flow.arrowStyle, label: a.flow.label })),
+    labels: state.labels,
+    nodeOverrides: state.nodes.map(n => ({ id: n.id, name: n.asset.name, notes: n.asset.notes })),
+  };
+}
+
+function applyLayout(layout) {
+  if (!layout || !layout.positions) return;
+  layout.positions.forEach(pos => {
+    const n = state.nodes.find(n => n.id === pos.id);
+    if (n) { n.x = pos.x; n.y = pos.y; if (pos.r) n.r = pos.r; }
+  });
+  if (layout.arrowStyles) {
+    layout.arrowStyles.forEach(as => {
+      const a = state.arrows.find(a => a.id === as.id);
+      if (a) { a.flow.arrowStyle = as.style; a.flow.label = as.label; }
+    });
+  }
+  if (layout.labels) state.labels = layout.labels;
+  if (layout.nodeOverrides) {
+    layout.nodeOverrides.forEach(o => {
+      const n = state.nodes.find(n => n.id === o.id);
+      if (n) { n.asset.name = o.name; n.asset.notes = o.notes; }
+    });
+  }
+  draw();
+}
+
+function autoSaveLayout() {
+  try {
+    localStorage.setItem('fas_layout', JSON.stringify(getLayoutData()));
+    state.lastSaved = new Date();
+    updateStatus();
+  } catch(e) {}
+}
+
+function saveLayout() {
+  autoSaveLayout();
+  setStatus('Layout saved to browser storage ✓', true);
+}
+
+function tryLoadSavedLayout() {
+  try {
+    const raw = localStorage.getItem('fas_layout');
+    if (raw) { applyLayout(JSON.parse(raw)); setStatus('Restored saved layout', true); }
+  } catch(e) {}
+}
+
+function exportLayout() {
+  const data = JSON.stringify(getLayoutData(), null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'fas_layout_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+}
+
+function importLayout() { document.getElementById('layout-import-input').click(); }
+
+function handleLayoutImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const layout = JSON.parse(e.target.result);
+      applyLayout(layout);
+      autoSaveLayout();
+      setStatus('Layout imported: ' + file.name, true);
+    } catch(err) {
+      alert('Could not parse layout file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SNAPSHOTS
+// ═══════════════════════════════════════════════════════════════════
+function saveSnapshot() {
+  const name = prompt('Snapshot name (e.g. "Dec 2025 Review"):');
+  if (!name) return;
+  try {
+    const snapshots = JSON.parse(localStorage.getItem('fas_snapshots') || '[]');
+    snapshots.unshift({ name, date: new Date().toISOString(), layout: getLayoutData() });
+    if (snapshots.length > 20) snapshots.pop();
+    localStorage.setItem('fas_snapshots', JSON.stringify(snapshots));
+    renderSnapshots();
+    setStatus('Snapshot saved: ' + name, true);
+  } catch(e) { alert('Could not save snapshot: ' + e.message); }
+}
+
+function loadSnapshot(idx) {
+  try {
+    const snapshots = JSON.parse(localStorage.getItem('fas_snapshots') || '[]');
+    if (snapshots[idx]) { applyLayout(snapshots[idx].layout); setStatus('Loaded snapshot: ' + snapshots[idx].name, true); }
+  } catch(e) {}
+}
+
+function renderSnapshots() {
+  try {
+    const snapshots = JSON.parse(localStorage.getItem('fas_snapshots') || '[]');
+    const list = document.getElementById('snapshot-list');
+    if (!snapshots.length) { list.innerHTML = '<div style="padding:8px 14px;font-size:0.72rem;color:var(--text-lt)">No snapshots yet</div>'; return; }
+    list.innerHTML = snapshots.map((s,i) => `
+      <div class="snapshot-item">
+        <div><div class="snap-name">${esc(s.name)}</div>
+        <div class="snap-date">${new Date(s.date).toLocaleDateString()}</div></div>
+        <button class="snap-load" onclick="loadSnapshot(${i})">Load</button>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// STATUS
+// ═══════════════════════════════════════════════════════════════════
+function setStatus(msg, ok) {
+  document.getElementById('status-text').textContent = msg;
+  document.getElementById('status-dot').className = 'dot' + (ok ? '' : ' red');
+}
+
+function updateStatus() {
+  document.getElementById('status-assets').textContent = state.nodes.length ? state.nodes.length + ' assets' : '';
+  document.getElementById('status-flows').textContent  = state.arrows.length ? state.arrows.length + ' flows' : '';
+  document.getElementById('status-saved').textContent  = state.lastSaved ? 'Saved ' + state.lastSaved.toLocaleTimeString() : '';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// DEMO DATA
+// ═══════════════════════════════════════════════════════════════════
+function loadDemo() {
+  const demoAssets = [
+    { id:'A01', name:'Joint Checking',        type:'Checking',     taxCategory:'Non-Deferred', person:'Shared', value:25000  },
+    { id:'A02', name:'Joint Savings',          type:'Savings',      taxCategory:'Non-Deferred', person:'Shared', value:80000  },
+    { id:'A03', name:'Person A 401(k)',        type:'401(k)',       taxCategory:'Tax-Deferred', person:'A',      value:420000 },
+    { id:'A04', name:'Person B 401(k)',        type:'401(k)',       taxCategory:'Tax-Deferred', person:'B',      value:310000 },
+    { id:'A05', name:'Person A Brokerage',     type:'Brokerage',   taxCategory:'Non-Deferred', person:'A',      value:195000 },
+    { id:'A06', name:'Person B Brokerage',     type:'Brokerage',   taxCategory:'Non-Deferred', person:'B',      value:88000  },
+    { id:'A07', name:'Person A IRA',           type:'IRA',         taxCategory:'Tax-Deferred', person:'A',      value:210000 },
+    { id:'A08', name:'Person B IRA',           type:'IRA',         taxCategory:'Tax-Deferred', person:'B',      value:145000 },
+    { id:'A09', name:'Life Insurance Annuity', type:'Annuity',     taxCategory:'Tax-Deferred', person:'A',      value:95000  },
+    { id:'A10', name:'HSA',                    type:'HSA',         taxCategory:'Tax-Deferred', person:'Shared', value:18000  },
+    { id:'A11', name:'Person A ESPP',          type:'Stock',       taxCategory:'Non-Deferred', person:'A',      value:42000  },
+    { id:'A12', name:'Person B Stock',         type:'Stock',       taxCategory:'Non-Deferred', person:'B',      value:12000  },
+    { id:'A13', name:'Payroll Pass-Through',   type:'Pass-Through',taxCategory:'Non-Deferred', person:'Shared', value:500   },
+    { id:'A14', name:'Dividend Pass-Through',  type:'Pass-Through',taxCategory:'Non-Deferred', person:'Shared', value:200   },
+    { id:'A15', name:'Emergency Fund',         type:'Savings',     taxCategory:'Non-Deferred', person:'Shared', value:30000  },
+  ];
+  const maxVal = Math.max(...demoAssets.map(a => a.value));
+  state.assets = demoAssets.map(a => ({
+    ...a,
+    scaledSize: Math.sqrt(a.value) / Math.sqrt(maxVal) * 100,
+    diameter: Math.max(16, Math.sqrt(a.value) / Math.sqrt(maxVal) * 120),
+    notes: ''
+  }));
+  const demoFlows = [
+    { id:'F01', fromId:'A13', fromName:'Payroll Pass-Through', toId:'A01', toName:'Joint Checking',     flowType:'Income',   label:'Payroll',           volume:85000, arrowStyle:'Solid',  biDir:false, active:true },
+    { id:'F02', fromId:'A01', fromName:'Joint Checking',       toId:'A02', toName:'Joint Savings',      flowType:'Transfer', label:'Monthly savings',   volume:24000, arrowStyle:'Dashed', biDir:false, active:true },
+    { id:'F03', fromId:'A01', fromName:'Joint Checking',       toId:'A15', toName:'Emergency Fund',     flowType:'Transfer', label:'Emergency top-up',  volume:3000,  arrowStyle:'Dashed', biDir:false, active:true },
+    { id:'F04', fromId:'A01', fromName:'Joint Checking',       toId:'',    toName:'Household Expenses', flowType:'Expense',  label:'Expenses',          volume:48000, arrowStyle:'Dotted', biDir:false, active:true },
+    { id:'F05', fromId:'A05', fromName:'Person A Brokerage',   toId:'A14', toName:'Dividend Pass-Through', flowType:'Income', label:'Dividends',        volume:4200,  arrowStyle:'Solid',  biDir:false, active:true },
+    { id:'F06', fromId:'A14', fromName:'Dividend Pass-Through',toId:'A01', toName:'Joint Checking',     flowType:'Transfer', label:'Div. sweep',        volume:4200,  arrowStyle:'Solid',  biDir:false, active:true },
+    { id:'F07', fromId:'A11', fromName:'Person A ESPP',        toId:'A05', toName:'Person A Brokerage', flowType:'Transfer', label:'ESPP → brokerage',  volume:8000,  arrowStyle:'Solid',  biDir:false, active:true },
+    { id:'F08', fromId:'A02', fromName:'Joint Savings',        toId:'A05', toName:'Person A Brokerage', flowType:'Transfer', label:'Annual investment',  volume:12000, arrowStyle:'Dashed', biDir:false, active:true },
+  ];
+  state.flows = demoFlows;
+  buildCanvas();
+  document.getElementById('welcome').style.display = 'none';
+  setStatus('Demo data loaded', true);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════
+renderSnapshots();
+document.getElementById('btn-grid').classList.add('active');
+document.getElementById('btn-labels').classList.add('active');
+document.getElementById('btn-values').classList.add('active');
+document.getElementById('btn-flows').classList.add('active');
+</script>
+
+<style>
+@media print {
+  header, #toolbar, #panel-left, #panel-right, #statusbar { display: none !important; }
+  #main { height: 100vh; }
+  #canvas-wrapper { width: 100vw; }
+  #welcome { display: none !important; }
+}
+</style>
+</body>
+</html>
